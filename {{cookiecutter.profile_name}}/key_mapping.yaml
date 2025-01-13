@@ -1,8 +1,9 @@
 # only parameters defined in key_mapping (see below) are passed to the command in the order specified.
 system: "{{cookiecutter.cluster_system}}" #check if system is defined below
+log_mode: "default"  # Options: "default" or "defined"
 
 slurm:
-  command: 'sbatch --parsable --output=cluster_log/%j.out --error=cluster_log/%j.out'
+  command: 'sbatch --parsable {log_directive}'
   key_mapping:
     name: "--job-name={}"
     threads: "--cpus-per-task={} -n1"
@@ -10,8 +11,13 @@ slurm:
     account: "--account={}"
     queue: "--partition={}"
     time_min: "--time={}"
+  log_default: "--output=cluster_log/%j.out --error=cluster_log/%j.err"
+  log_defined:
+    single: "--output={log} --error={log}"
+    split: "--output={stdout} --error={stderr}"
+
 pbs:
-  command: "qsub"
+  command: "qsub {log_directive}"
   key_mapping:
     name: "-N {}"
     account: "-A {}"
@@ -19,16 +25,23 @@ pbs:
     threads: "-l nodes=1:ppn={}" # always use 1 node
     mem_mb: "-l mem={}mb"
     time_min: "-l walltime={}00" #min= seconds x 100
+  log_default: "-o cluster_log/$PBS_JOBID.out -e cluster_log/$PBS_JOBID.err"
+  log_defined:
+    single: "-o {log} -e {log}"
+    split: "-o {stdout} -e {stderr}"
+
 lsf:
-  command: "bsub -e %J.log -o %J.log"
+  command: "bsub {log_directive}"
   key_mapping:
     queue: "-q {}"
     name: "-J {}"
     threads: "-n {}"
     mem_mb: '-R "rusage[mem={}]" -C1'
     account: "-P {}"
-# TODO: time_min    
-
+  log_default: "-o cluster_log/%J.log -e cluster_log/%J.log"
+  log_defined:
+    single: "-o {log} -e {log}"
+    split: "-o {stdout} -e {stderr}"
 
 
 

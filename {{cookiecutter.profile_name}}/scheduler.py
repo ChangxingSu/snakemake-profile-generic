@@ -59,10 +59,14 @@ else:
 
 # don't overwrite default parameters if defined in rule (or config file)
 if ("threads" in job_properties) and ("threads" not in cluster_param):
+    # logging
+    logging.info(f"threads not in cluster_param, set to snakemake rule setting: [{job_properties['threads']}]")
     cluster_param["threads"] = job_properties["threads"]
 
 for res in ["time_min", "mem_mb"]:
     if (res in job_properties["resources"]) and (res not in cluster_param):
+        # logging
+        logging.info(f"Resource {res} not in cluster_param, set to snakemake rule setting: [{job_properties['resources'][res]}]")
         cluster_param[res] = job_properties["resources"][res]
 
 ## Definie queue
@@ -120,7 +124,59 @@ command = command_options[system]["command"]
 
 key_mapping = command_options[system]["key_mapping"]
 
-# construct command:
+def get_log_directive(job_properties, cluster_system):
+    """
+    Get log directive for cluster system
+    
+    Args:
+        job_properties: job properties
+        cluster_system: cluster system
+    
+    Returns:
+        log_directive: log directive parameter for cluster system
+    """
+    # get system config
+    system_config = command_options[cluster_system]
+    # get log mode, it defined in key_mapping.yaml header
+    log_mode = command_options.get("log_mode", "default")
+    
+    if log_mode == "defined" and "log" in job_properties:
+        # Use rule defined log path
+        log_files = job_properties["log"]
+        if isinstance(log_files, list):
+            # Multiple log files
+            if len(log_files) >= 2:
+                return system_config["log_defined"]["split"].format(
+                    stdout=log_files[0],
+                    stderr=log_files[1]
+                )
+            else:
+                return system_config["log_defined"]["single"].format(
+                    log=log_files[0]
+                )
+        else:
+            # Single log file
+            return system_config["log_defined"]["single"].format(
+                log=log_files
+            )
+    elif log_mode == "default":
+        # Use default log path
+        os.makedirs("cluster_log", exist_ok=True)
+        return system_config["log_default"]
+    elif log_mode == "defined" and "log" not in job_properties:
+        # Use default log path
+        # TODO: Based on job_name to generate log path
+        logging.warning("log not defined in job_properties, use default log path")
+        os.makedirs("cluster_log", exist_ok=True)
+        return system_config["log_default"]
+    else:
+        raise ValueError(f"Invalid log mode: {log_mode}")
+
+# Add log directive to command
+log_directive = get_log_directive(job_properties, system)
+command = command_options[system]["command"].format(log_directive=log_directive)
+
+# Add other parameters
 for key in cluster_param:
     if key not in key_mapping:
         logging.warning(
